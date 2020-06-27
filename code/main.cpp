@@ -23,14 +23,14 @@ static bool writeEntireFile(const fs::path::value_type* fileName,
 		const size_t elementSize = sizeof(wchar_t);
 		const size_t fileDataElementCount = 
 			wstring(nullTerminatedFileData).size();
-		const size_t bytesWritten = 
+		const size_t elementsWritten = 
 			fwrite(nullTerminatedFileData, elementSize, 
 			       fileDataElementCount, file);
 		if(fclose(file) != 0)
 		{
 			fprintf(stderr, "Failed to close '%ws'!\n", fileName);
 		}
-		if(bytesWritten != fileDataElementCount*elementSize)
+		if(elementsWritten != fileDataElementCount)
 		{
 			fprintf(stderr, "Failed to write '%ws'!\n", fileName);
 			return false;
@@ -93,7 +93,17 @@ wstring generateKAssetsHeader(const vector<wstring>& assetFileNames)
 		result.append(afn == 0 
 			? L"\t{ \"" 
 			: L"\t, \"");
-		result.append(assetFileName);
+		for(wchar_t c : assetFileName)
+		{
+			if(c == '\\')
+			{
+				result.push_back('/');
+			}
+			else
+			{
+				result.push_back(c);
+			}
+		}
 		result.append(L"\"\n");
 	}
 	result.append(L"};\n");
