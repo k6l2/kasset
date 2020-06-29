@@ -3,6 +3,7 @@
 		"filesystem": "cpp",
 		"xstring": "cpp",
 		"iosfwd": "cpp",
-		"vector": "cpp"
+		"vector": "cpp",
+		"regex": "cpp"
 	}
 }

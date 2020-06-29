@@ -1,28 +1,70 @@
 #include <filesystem>
 #include <cstdlib>
 #include <string>
-using std::wstring;
+using std::string;
 #include <sstream>
-using std::wstringstream;
+using std::stringstream;
+using std::istringstream;
 #include <vector>
 using std::vector;
+#include <regex>
+using std::regex;
 #include <cassert>
 namespace fs = std::filesystem;
 static const wchar_t* ASSET_IGNORE_FILE_NAME = L"assets.ignore";
 static bool g_verbose;
-static bool writeEntireFile(const fs::path::value_type* fileName, 
-                            const wchar_t* nullTerminatedFileData)
+/** @return null-ternimated c-string of the entire file's contents */
+static char* readEntireFile(const fs::path::value_type* fileName, 
+                            uintmax_t fileSize)
 {
 #if _MSC_VER
-	FILE* file = _wfopen(fileName, L"wb");
+	FILE* file = _wfopen(fileName, L"rb");
 #else
-	FILE* file = fopen(fileName, "wb");
+	FILE* file = fopen(fileName, "rb");
 #endif
 	if(file)
 	{
-		const size_t elementSize = sizeof(wchar_t);
+		char* data = static_cast<char*>(malloc(fileSize + 1));
+		if(!data)
+		{
+			fprintf(stderr, "Failed to alloc %lli bytes for '%ws'!\n", 
+			        fileSize + 1, fileName);
+			return nullptr;
+		}
+		const size_t bytesRead = fread(data, sizeof(char), fileSize, file);
+		if(bytesRead != fileSize)
+		{
+			free(data);
+			fprintf(stderr, "Failed to completely read '%ws'!\n", fileName);
+			return nullptr;
+		}
+		if(fclose(file) != 0)
+		{
+			fprintf(stderr, "Failed to close '%ws'!\n", fileName);
+		}
+		data[fileSize] = '\0';
+		return data;
+	}
+	else
+	{
+		fprintf(stderr, "Failed to open '%ws'!\n", fileName);
+		return nullptr;
+	}
+}
+static bool writeEntireFile(const fs::path::value_type* fileName, 
+                            const char* nullTerminatedFileData, 
+                            bool appendWriteMode)
+{
+#if _MSC_VER
+	FILE* file = _wfopen(fileName, appendWriteMode ? L"ab" : L"wb");
+#else
+	FILE* file = fopen(fileName, appendWriteMode ? "ab" : "wb");
+#endif
+	if(file)
+	{
+		const size_t elementSize = sizeof(nullTerminatedFileData[0]);
 		const size_t fileDataElementCount = 
-			wstring(nullTerminatedFileData).size();
+			string(nullTerminatedFileData).size();
 		const size_t elementsWritten = 
 			fwrite(nullTerminatedFileData, elementSize, 
 			       fileDataElementCount, file);
@@ -56,17 +98,17 @@ static bool isNumeric(wchar_t c)
 	const bool result = (c >= '0' && c <= '9');
 	return result;
 }
-wstring generateKAssetsHeader(const vector<wstring>& assetFileNames)
+string generateKAssetsHeader(const vector<string>& assetFileNames)
 {
-	wstring result;
-	result.append(L"#pragma once\n");
-	result.append(L"enum class KAssetIndex : unsigned\n");
+	string result;
+	result.append("#pragma once\n");
+	result.append("enum class KAssetIndex : unsigned\n");
 	for(size_t afn = 0; afn < assetFileNames.size(); afn++)
 	{
-		const wstring& assetFileName = assetFileNames[afn];
+		const string& assetFileName = assetFileNames[afn];
 		result.append(afn == 0 
-			? L"\t{ " 
-			: L"\t, ");
+			? "\t{ " 
+			: "\t, ");
 		for(wchar_t c : assetFileName)
 		{
 			if(isAlpha(c) || isNumeric(c))
@@ -78,21 +120,21 @@ wstring generateKAssetsHeader(const vector<wstring>& assetFileNames)
 				result.push_back('_');
 			}
 		}
-		wstringstream wss;
+		stringstream wss;
 		wss << " = "<< afn << "\n";
 		result.append(wss.str());
 	}
-	result.append(L"\t, ENUM_SIZE\n");
-	result.append(L"};\n");
-	result.append(L"static const unsigned KASSET_COUNT = \n");
-	result.append(L"\tstatic_cast<unsigned>(KAssetIndex::ENUM_SIZE);\n");
-	result.append(L"static const char* kAssetFileNames[] = \n");
+	result.append("\t, ENUM_SIZE\n");
+	result.append("};\n");
+	result.append("static const unsigned KASSET_COUNT = \n");
+	result.append("\tstatic_cast<unsigned>(KAssetIndex::ENUM_SIZE);\n");
+	result.append("static const char* kAssetFileNames[] = \n");
 	for(size_t afn = 0; afn < assetFileNames.size(); afn++)
 	{
-		const wstring& assetFileName = assetFileNames[afn];
+		const string& assetFileName = assetFileNames[afn];
 		result.append(afn == 0 
-			? L"\t{ \"" 
-			: L"\t, \"");
+			? "\t{ \"" 
+			: "\t, \"");
 		for(wchar_t c : assetFileName)
 		{
 			if(c == '\\')
@@ -104,9 +146,9 @@ wstring generateKAssetsHeader(const vector<wstring>& assetFileNames)
 				result.push_back(c);
 			}
 		}
-		result.append(L"\"\n");
+		result.append("\"\n");
 	}
-	result.append(L"};\n");
+	result.append("};\n");
 	return result;
 }
 int main(int argc, char** argv)
@@ -138,13 +180,24 @@ int main(int argc, char** argv)
 	}
 	const fs::directory_entry entryAssetIgnore(
 		assetPath/ASSET_IGNORE_FILE_NAME);
+	vector<regex> regexListIgnore;
 	if(entryAssetIgnore.exists())
 	// if the asset ignore file exists, load its contents so we can obey the 
 	//	ignored patterns contained within... //
 	{
-		///TODO: 
+		const uintmax_t fileSize = fs::file_size(entryAssetIgnore.path());
+		char*const fileAssetIgnore = 
+			readEntireFile(entryAssetIgnore.path().c_str(), fileSize);
+		// @HACK: `fileAssetIgnore` can leak and that's fine, since this file 
+		//        should be extremely small anyways.
+		istringstream iss(fileAssetIgnore);
+		string line;
+		while(std::getline(iss, line))
+		{
+			regexListIgnore.emplace_back(line);
+		}
 	}
-	vector<wstring> assetFileNames;
+	vector<string> assetFileNames;
 	for(const fs::directory_entry& entry : 
 		fs::recursive_directory_iterator(assetPath))
 	{
@@ -165,19 +218,37 @@ int main(int argc, char** argv)
 					currPath = currPath.parent_path();
 				}
 			}
-			if(g_verbose)
+			// check to see if the asset's filename matches an ignored regex //
+			bool isIgnored = false;
+			for(const regex& regexIgnore : regexListIgnore)
 			{
+				if(std::regex_match(
+				          (char*)pathToFileRelativeAssetPath.u8string().c_str(), 
+				          regexIgnore))
+				{
+					isIgnored = true;
+				}
+			}
+			if(isIgnored)
+			{
+				if(g_verbose)
+					printf("Ignoring asset '%ws'...\n", 
+					       pathToFileRelativeAssetPath.c_str());
+				continue;
+			}
+			// Add the asset! //
+			if(g_verbose)
 				printf("Adding asset '%ws'...\n", 
 				       pathToFileRelativeAssetPath.c_str());
-			}
-			assetFileNames.push_back(pathToFileRelativeAssetPath.c_str());
+			assetFileNames.push_back(
+				(char*)pathToFileRelativeAssetPath.u8string().c_str());
 		}
 	}
 	// output the generated asset manifest header file //
 	fs::create_directories(outputPath);
-	const wstring genKAssetHeader = generateKAssetsHeader(assetFileNames);
+	const string genKAssetHeader = generateKAssetsHeader(assetFileNames);
 	const fs::path outPath = outputPath / "gen_kassets.h";
-	writeEntireFile(outPath.c_str(), genKAssetHeader.c_str());
+	writeEntireFile(outPath.c_str(), genKAssetHeader.c_str(), false);
 	return EXIT_SUCCESS;
 }
 #if 0
@@ -800,44 +871,6 @@ static void setFileReadOnly(const fs::path::value_type* fileName)
 	}
 }
 #endif// defined(_WIN32)
-/** @return null-ternimated c-string of the entire file's contents */
-static char* readEntireFile(const fs::path::value_type* fileName, 
-                            uintmax_t fileSize)
-{
-#if _MSC_VER
-	FILE* file = _wfopen(fileName, L"rb");
-#else
-	FILE* file = fopen(fileName, "rb");
-#endif
-	if(file)
-	{
-		char* data = static_cast<char*>(malloc(fileSize + 1));
-		if(!data)
-		{
-			fprintf(stderr, "Failed to alloc %lli bytes for '%ws'!\n", 
-			        fileSize + 1, fileName);
-			return nullptr;
-		}
-		const size_t bytesRead = fread(data, sizeof(char), fileSize, file);
-		if(bytesRead != fileSize)
-		{
-			free(data);
-			fprintf(stderr, "Failed to completely read '%ws'!\n", fileName);
-			return nullptr;
-		}
-		if(fclose(file) != 0)
-		{
-			fprintf(stderr, "Failed to close '%ws'!\n", fileName);
-		}
-		data[fileSize] = '\0';
-		return data;
-	}
-	else
-	{
-		fprintf(stderr, "Failed to open '%ws'!\n", fileName);
-		return nullptr;
-	}
-}
 string generateHeaderKAssets()
 {
 	string result;
