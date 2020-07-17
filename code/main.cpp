@@ -124,7 +124,14 @@ string generateKAssetsHeader(const vector<string>& assetFileNames)
 		wss << " = "<< afn << "\n";
 		result.append(wss.str());
 	}
-	result.append("\t, ENUM_SIZE\n");
+	if(assetFileNames.empty())
+	{
+		result.append("\t{ ENUM_SIZE\n");
+	}
+	else
+	{
+		result.append("\t, ENUM_SIZE\n");
+	}
 	result.append("};\n");
 	result.append("static const unsigned KASSET_COUNT = \n");
 	result.append("\tstatic_cast<unsigned>(KAssetIndex::ENUM_SIZE);\n");
@@ -148,7 +155,14 @@ string generateKAssetsHeader(const vector<string>& assetFileNames)
 		}
 		result.append("\"\n");
 	}
-	result.append("};\n");
+	if(assetFileNames.empty())
+	{
+		result.append("{\"NO_KASSETS_FOUND\"};\n");
+	}
+	else
+	{
+		result.append("};\n");
+	}
 	return result;
 }
 // string whitespace trimming functions //
