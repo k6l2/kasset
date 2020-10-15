@@ -12,6 +12,7 @@ using std::regex;
 #include <cassert>
 namespace fs = std::filesystem;
 static const wchar_t* ASSET_IGNORE_FILE_NAME = L"assets.ignore";
+static const char* GEN_ASSET_HEADER_FILE_NAME = "gen_kgtAssets.h";
 static bool g_verbose;
 /** @return null-ternimated c-string of the entire file's contents */
 static char* readEntireFile(const fs::path::value_type* fileName, 
@@ -102,7 +103,7 @@ string generateKAssetsHeader(const vector<string>& assetFileNames)
 {
 	string result;
 	result.append("#pragma once\n");
-	result.append("enum class KAssetIndex : unsigned\n");
+	result.append("enum class KgtAssetIndex : unsigned\n");
 	for(size_t afn = 0; afn < assetFileNames.size(); afn++)
 	{
 		const string& assetFileName = assetFileNames[afn];
@@ -133,9 +134,9 @@ string generateKAssetsHeader(const vector<string>& assetFileNames)
 		result.append("\t, ENUM_SIZE\n");
 	}
 	result.append("};\n");
-	result.append("static const unsigned KASSET_COUNT = \n");
-	result.append("\tstatic_cast<unsigned>(KAssetIndex::ENUM_SIZE);\n");
-	result.append("static const char* kAssetFileNames[] = \n");
+	result.append("static const unsigned KGT_ASSET_COUNT = \n");
+	result.append("\tstatic_cast<unsigned>(KgtAssetIndex::ENUM_SIZE);\n");
+	result.append("static const char* kgtAssetFileNames[] = \n");
 	for(size_t afn = 0; afn < assetFileNames.size(); afn++)
 	{
 		const string& assetFileName = assetFileNames[afn];
@@ -281,7 +282,7 @@ int main(int argc, char** argv)
 	// output the generated asset manifest header file //
 	fs::create_directories(outputPath);
 	const string genKAssetHeader = generateKAssetsHeader(assetFileNames);
-	const fs::path outPath = outputPath / "gen_kassets.h";
+	const fs::path outPath = outputPath / GEN_ASSET_HEADER_FILE_NAME;
 	writeEntireFile(outPath.c_str(), genKAssetHeader.c_str(), false);
 	return EXIT_SUCCESS;
 }
