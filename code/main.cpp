@@ -113,26 +113,18 @@ string generateKAssetsHeader(const vector<string>& assetFileNames)
 		for(wchar_t c : assetFileName)
 		{
 			if(isAlpha(c) || isNumeric(c))
-			{
 				result.push_back(c);
-			}
 			else
-			{
 				result.push_back('_');
-			}
 		}
 		stringstream wss;
 		wss << " = "<< afn << "\n";
 		result.append(wss.str());
 	}
 	if(assetFileNames.empty())
-	{
 		result.append("\t{ ENUM_SIZE\n");
-	}
 	else
-	{
 		result.append("\t, ENUM_SIZE\n");
-	}
 	result.append("};\n");
 	result.append("static const unsigned KGT_ASSET_COUNT = \n");
 	result.append("\tstatic_cast<unsigned>(KgtAssetIndex::ENUM_SIZE);\n");
@@ -146,24 +138,18 @@ string generateKAssetsHeader(const vector<string>& assetFileNames)
 		for(wchar_t c : assetFileName)
 		{
 			if(c == '\\')
-			{
 				result.push_back('/');
-			}
 			else
-			{
 				result.push_back(c);
-			}
 		}
 		result.append("\"\n");
 	}
 	if(assetFileNames.empty())
-	{
 		result.append("{\"NO_KASSETS_FOUND\"};\n");
-	}
 	else
-	{
 		result.append("};\n");
-	}
+	if(assetFileNames.empty())
+		result.append("#define KGT_ASSET_NONE_FOUND\n");
 	return result;
 }
 // string whitespace trimming functions //
